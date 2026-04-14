@@ -1,35 +1,36 @@
-import { users, type Task } from "@/lib/data";
+import type { Tables } from "@/integrations/supabase/types";
 import { Progress } from "@/components/ui/progress";
 import { AlertTriangle } from "lucide-react";
 
 interface LeaderboardProps {
-  tasks: Task[];
+  tasks: Tables<"tasks">[];
+  members: (Tables<"profiles"> & { role: string })[];
 }
 
-export function Leaderboard({ tasks }: LeaderboardProps) {
-  const memberStats = users.map((user) => {
-    const userTasks = tasks.filter(t => t.assigneeId === user.id);
+export function Leaderboard({ tasks, members }: LeaderboardProps) {
+  const stats = members.map((m) => {
+    const userTasks = tasks.filter(t => t.assignee_id === m.user_id);
     const total = userTasks.length;
     const done = userTasks.filter(t => t.status === "done").length;
     const progress = total === 0 ? 0 : Math.round((done / total) * 100);
     const blockers = userTasks.filter(t => t.blocker.length > 0);
-    return { user, total, done, progress, blockers };
+    return { member: m, total, done, progress, blockers };
   }).sort((a, b) => b.progress - a.progress);
 
   return (
     <div className="glass-card p-6 space-y-4">
       <h2 className="text-lg font-bold text-foreground">Team Leaderboard</h2>
       <div className="space-y-4">
-        {memberStats.map(({ user, total, done, progress, blockers }) => (
-          <div key={user.id} className="space-y-2">
+        {stats.map(({ member, total, done, progress, blockers }) => (
+          <div key={member.id} className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
-                  {user.avatar}
+                  {member.avatar_initials}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{user.name}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{user.role}</p>
+                  <p className="text-sm font-medium text-foreground">{member.display_name}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{member.role}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

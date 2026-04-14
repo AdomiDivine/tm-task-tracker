@@ -1,14 +1,14 @@
-import type { Task, ProjectKey } from "@/lib/data";
-import { projects } from "@/lib/data";
+import type { Tables } from "@/integrations/supabase/types";
 import { ClipboardList, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface StatsBarProps {
-  tasks: Task[];
-  selectedProject: ProjectKey | "all";
+  tasks: Tables<"tasks">[];
+  projects: Tables<"projects">[];
+  selectedProject: string;
 }
 
-export function StatsBar({ tasks, selectedProject }: StatsBarProps) {
-  const filtered = selectedProject === "all" ? tasks : tasks.filter(t => t.project === selectedProject);
+export function StatsBar({ tasks, projects, selectedProject }: StatsBarProps) {
+  const filtered = selectedProject === "all" ? tasks : tasks.filter(t => t.project_id === selectedProject);
   const total = filtered.length;
   const pending = filtered.filter(t => t.status === "pending").length;
   const inProgress = filtered.filter(t => t.status === "in-progress").length;
@@ -17,7 +17,7 @@ export function StatsBar({ tasks, selectedProject }: StatsBarProps) {
 
   const projectName = selectedProject === "all"
     ? "All Projects"
-    : projects.find(p => p.key === selectedProject)?.name ?? selectedProject;
+    : projects.find(p => p.id === selectedProject)?.name ?? "Project";
 
   const stats = [
     { label: "Total Tasks", value: total, icon: ClipboardList, color: "text-foreground" },
