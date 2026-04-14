@@ -31,14 +31,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "TM Work OS — Takeout Media" },
+      { title: "TM Task Tracker" },
       { name: "description", content: "Project-based task management for Takeout Media SBU" },
       { name: "author", content: "Takeout Media" },
-      { property: "og:title", content: "TM Work OS" },
+      { property: "og:title", content: "TM Task Tracker" },
       { property: "og:description", content: "Project-based task management for Takeout Media SBU" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "TM Task Tracker" },
+      { name: "twitter:description", content: "Project-based task management for Takeout Media SBU" },
     ],
     links: [
       {
