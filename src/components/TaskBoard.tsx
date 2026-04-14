@@ -1,14 +1,16 @@
-import type { Task, ProjectKey } from "@/lib/data";
+import type { Tables } from "@/integrations/supabase/types";
 import { TaskCard } from "./TaskCard";
 
 interface TaskBoardProps {
-  tasks: Task[];
-  selectedProject: ProjectKey | "all";
-  onMoveTask: (taskId: string, newStatus: Task["status"]) => void;
+  tasks: Tables<"tasks">[];
+  projects: Tables<"projects">[];
+  members: { user_id: string; display_name: string }[];
+  selectedProject: string;
+  onMoveTask: (taskId: string, newStatus: string) => void;
 }
 
-export function TaskBoard({ tasks, selectedProject, onMoveTask }: TaskBoardProps) {
-  const filtered = selectedProject === "all" ? tasks : tasks.filter(t => t.project === selectedProject);
+export function TaskBoard({ tasks, projects, members, selectedProject, onMoveTask }: TaskBoardProps) {
+  const filtered = selectedProject === "all" ? tasks : tasks.filter(t => t.project_id === selectedProject);
   const pending = filtered.filter(t => t.status === "pending");
   const inProgress = filtered.filter(t => t.status === "in-progress");
   const done = filtered.filter(t => t.status === "done");
@@ -25,16 +27,14 @@ export function TaskBoard({ tasks, selectedProject, onMoveTask }: TaskBoardProps
         <div key={col.title} className="space-y-3">
           <div className={`flex items-center gap-2 pb-2 border-b ${col.accent}`}>
             <h2 className="text-sm font-semibold text-foreground">{col.title}</h2>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {col.tasks.length}
-            </span>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{col.tasks.length}</span>
           </div>
           <div className="space-y-3">
             {col.tasks.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-8">No tasks</p>
             ) : (
               col.tasks.map((task) => (
-                <TaskCard key={task.id} task={task} onMoveTask={onMoveTask} />
+                <TaskCard key={task.id} task={task} projects={projects} members={members} onMoveTask={onMoveTask} />
               ))
             )}
           </div>
