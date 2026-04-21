@@ -2,21 +2,45 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
-type Project = Tables<"projects">;
-type Task = Tables<"tasks">;
+export type Project = Tables<"projects">;
+export type Task = Tables<"tasks"> & { collaborator_ids?: string[] };
+export type Attachment = { type: "link" | "file"; name: string; url: string; path?: string };
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    supabase.from("projects").select("*").order("name").then(({ data }) => {
-      setProjects(data ?? []);
-      setLoading(false);
-    });
+  const fetchProjects = useCallback(async () => {
+    const { data } = await supabase.from("projects").select("*").order("name");
+    setProjects(data ?? []);
+    setLoading(false);
   }, []);
 
-  return { projects, loading };
+  useEffect(() => {
+    fetchProjects();
+    const ch = supabase
+      .channel("projects-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, fetchProjects)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchProjects]);
+
+  const createProject = useCallback(async (p: { name: string; key: string; color: string; icon: string }) => {
+    const { error } = await supabase.from("projects").insert(p);
+    if (error) throw error;
+  }, []);
+
+  const updateProject = useCallback(async (id: string, p: Partial<Project>) => {
+    const { error } = await supabase.from("projects").update(p).eq("id", id);
+    if (error) throw error;
+  }, []);
+
+  const archiveProject = useCallback(async (id: string, archived: boolean) => {
+    const { error } = await supabase.from("projects").update({ archived }).eq("id", id);
+    if (error) throw error;
+  }, []);
+
+  return { projects, loading, createProject, updateProject, archiveProject, refetch: fetchProjects };
 }
 
 export function useTasks() {
@@ -24,66 +48,96 @@ export function useTasks() {
   const [loading, setLoading] = useState(true);
 
   const fetchTasks = useCallback(async () => {
-    const { data } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setTasks(data ?? []);
+    const [{ data: tdata }, { data: cdata }] = await Promise.all([
+      supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+      supabase.from("task_collaborators").select("*"),
+    ]);
+    const merged = (tdata ?? []).map((t) => ({
+      ...t,
+      collaborator_ids: (cdata ?? []).filter((c) => c.task_id === t.id).map((c) => c.user_id),
+    }));
+    setTasks(merged);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchTasks();
-
-    // Real-time subscription
-    const channel = supabase
+    const ch = supabase
       .channel("tasks-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
-        fetchTasks();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, fetchTasks)
+      .on("postgres_changes", { event: "*", schema: "public", table: "task_collaborators" }, fetchTasks)
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(ch); };
   }, [fetchTasks]);
 
-  const moveTask = useCallback(async (taskId: string, newStatus: string) => {
-    // Optimistic update
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
-    await supabase.from("tasks").update({ status: newStatus }).eq("id", taskId);
-  }, []);
-
-  const createTask = useCallback(async (task: {
-    title: string;
-    project_id: string;
-    assignee_id: string | null;
-    duration: string;
-    blocker: string;
-    created_by: string;
-  }) => {
-    const { error } = await supabase.from("tasks").insert(task);
+  const updateTask = useCallback(async (taskId: string, patch: Partial<Tables<"tasks">>) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+    const { error } = await supabase.from("tasks").update(patch).eq("id", taskId);
     if (error) throw error;
   }, []);
 
-  return { tasks, loading, moveTask, createTask, refetch: fetchTasks };
+  const moveTask = useCallback(async (taskId: string, newStatus: string) => {
+    await updateTask(taskId, { status: newStatus });
+  }, [updateTask]);
+
+  const createTask = useCallback(async (input: {
+    title: string;
+    project_id: string;
+    assignee_id: string | null;
+    collaborator_ids: string[];
+    duration: string;
+    deadline: string | null;
+    blocker: string;
+    attachments: Attachment[];
+    created_by: string;
+  }) => {
+    const { collaborator_ids, attachments, deadline, ...rest } = input;
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({ ...rest, deadline, attachments: attachments as unknown as Tables<"tasks">["attachments"] })
+      .select()
+      .single();
+    if (error) throw error;
+    if (data && collaborator_ids.length > 0) {
+      await supabase.from("task_collaborators").insert(
+        collaborator_ids.map((user_id) => ({ task_id: data.id, user_id }))
+      );
+    }
+    return data;
+  }, []);
+
+  const updateCollaborators = useCallback(async (taskId: string, userIds: string[]) => {
+    await supabase.from("task_collaborators").delete().eq("task_id", taskId);
+    if (userIds.length > 0) {
+      await supabase.from("task_collaborators").insert(userIds.map((user_id) => ({ task_id: taskId, user_id })));
+    }
+  }, []);
+
+  const deleteTask = useCallback(async (taskId: string) => {
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+    if (error) throw error;
+  }, []);
+
+  return { tasks, loading, moveTask, updateTask, createTask, deleteTask, updateCollaborators, refetch: fetchTasks };
 }
 
 export function useMembers() {
   const [members, setMembers] = useState<(Tables<"profiles"> & { role: string })[]>([]);
 
-  useEffect(() => {
-    async function fetch() {
-      const { data: profiles } = await supabase.from("profiles").select("*");
-      const { data: roles } = await supabase.from("user_roles").select("*");
-      if (profiles) {
-        const merged = profiles.map((p) => ({
-          ...p,
-          role: roles?.find((r) => r.user_id === p.user_id)?.role ?? "member",
-        }));
-        setMembers(merged);
-      }
+  const fetchMembers = useCallback(async () => {
+    const [{ data: profiles }, { data: roles }] = await Promise.all([
+      supabase.from("profiles").select("*"),
+      supabase.from("user_roles").select("*"),
+    ]);
+    if (profiles) {
+      setMembers(profiles.map((p) => ({
+        ...p,
+        role: roles?.find((r) => r.user_id === p.user_id)?.role ?? "member",
+      })));
     }
-    fetch();
   }, []);
 
-  return { members };
+  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+
+  return { members, refetch: fetchMembers };
 }
