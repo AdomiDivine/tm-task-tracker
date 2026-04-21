@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import type { Tables } from "@/integrations/supabase/types";
-import { LayoutDashboard, Archive, BarChart3, FolderKanban, ChevronLeft, ChevronRight, LogOut, Sun, Moon, Settings } from "lucide-react";
+import { LayoutDashboard, Archive, BarChart3, FolderKanban, ChevronLeft, ChevronRight, LogOut, Sun, Moon, Settings, Users } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
