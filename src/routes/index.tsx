@@ -5,6 +5,8 @@ import { MemberStats } from "@/components/MemberStats";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TaskFormDialog } from "@/components/TaskFormDialog";
 import { ProjectManager } from "@/components/ProjectManager";
+import { NotificationBell } from "@/components/NotificationBell";
+import { MarkDoneDialog } from "@/components/MarkDoneDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useProjects, useTasks, useMembers, type Task } from "@/hooks/use-data";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -33,6 +35,7 @@ function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [pmOpen, setPmOpen] = useState(false);
+  const [markDoneTask, setMarkDoneTask] = useState<Task | null>(null);
 
   useNotifications(tasks, user?.id);
 
@@ -51,18 +54,27 @@ function DashboardPage() {
   const isAdmin = role === "admin";
   const visibleTasks = tasks.filter((t) => t.status !== "done");
 
-  async function handleMove(taskId: string, newStatus: string) {
+  function handleMove(taskId: string, newStatus: string) {
     const t = tasks.find((x) => x.id === taskId);
     if (!t) return;
-    if (newStatus === "done" && !t.completion_link && (Array.isArray(t.attachments) ? t.attachments.length === 0 : true)) {
-      const link = window.prompt("Add a deliverable link (Drive, doc, etc.) or leave blank:");
-      if (link) {
-        await updateTask(taskId, { status: "done", completion_link: link });
-        toast.success("Task completed with deliverable");
-        return;
-      }
+    if (newStatus === "done") {
+      setMarkDoneTask(t);
+      return;
     }
     moveTask(taskId, newStatus);
+  }
+
+  async function handleConfirmDone(link: string) {
+    if (!markDoneTask) return;
+    try {
+      await updateTask(markDoneTask.id, {
+        status: "done",
+        completion_link: link || markDoneTask.completion_link || "",
+      });
+      toast.success(link ? "Task completed with deliverable" : "Task completed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    }
   }
 
   async function handleDelete(taskId: string) {
@@ -93,6 +105,14 @@ function DashboardPage() {
       />
       <main className="flex-1 p-6 md:p-8 overflow-auto">
         <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Takeout Media</p>
+              <h1 className="text-2xl font-bold gradient-text">Work OS Dashboard</h1>
+            </div>
+            <NotificationBell userId={user.id} />
+          </div>
+
           <MemberStats tasks={tasks} userId={user.id} displayName={profile.display_name} />
 
           {isAdmin && <StatsBar tasks={visibleTasks} projects={projects} selectedProject={selectedProject} />}
@@ -128,8 +148,16 @@ function DashboardPage() {
         defaultProjectId={selectedProject}
         task={editTask}
         currentUserId={user.id}
+        currentUserName={profile.display_name}
         onCreate={createTask}
         onUpdate={handleUpdate}
+      />
+
+      <MarkDoneDialog
+        open={markDoneTask !== null}
+        onOpenChange={(o) => { if (!o) setMarkDoneTask(null); }}
+        taskTitle={markDoneTask?.title ?? ""}
+        onConfirm={handleConfirmDone}
       />
 
       {isAdmin && (
