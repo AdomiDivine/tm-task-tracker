@@ -46,6 +46,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          archived: boolean
           color: string
           created_at: string
           icon: string
@@ -54,6 +55,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          archived?: boolean
           color?: string
           created_at?: string
           icon?: string
@@ -62,6 +64,7 @@ export type Database = {
           name: string
         }
         Update: {
+          archived?: boolean
           color?: string
           created_at?: string
           icon?: string
@@ -71,12 +74,44 @@ export type Database = {
         }
         Relationships: []
       }
+      task_collaborators: {
+        Row: {
+          created_at: string
+          id: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_collaborators_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assignee_id: string | null
+          attachments: Json
           blocker: string
+          completion_link: string
           created_at: string
           created_by: string | null
+          deadline: string | null
           duration: string
           id: string
           project_id: string
@@ -86,9 +121,12 @@ export type Database = {
         }
         Insert: {
           assignee_id?: string | null
+          attachments?: Json
           blocker?: string
+          completion_link?: string
           created_at?: string
           created_by?: string | null
+          deadline?: string | null
           duration?: string
           id?: string
           project_id: string
@@ -98,9 +136,12 @@ export type Database = {
         }
         Update: {
           assignee_id?: string | null
+          attachments?: Json
           blocker?: string
+          completion_link?: string
           created_at?: string
           created_by?: string | null
+          deadline?: string | null
           duration?: string
           id?: string
           project_id?: string
@@ -144,6 +185,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_task: {
+        Args: { _task_id: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
