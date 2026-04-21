@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
-export type AppRole = "admin" | "member";
+export type AppRole = "admin" | "team_lead" | "member";
 
 export interface AuthState {
   user: User | null;
@@ -24,23 +24,22 @@ export function useAuth() {
   const fetchUserData = useCallback(async (userId: string) => {
     const [profileRes, roleRes] = await Promise.all([
       supabase.from("profiles").select("display_name, avatar_initials, sbu").eq("user_id", userId).single(),
-      supabase.from("user_roles").select("role").eq("user_id", userId).single(),
+      supabase.from("user_roles").select("role").eq("user_id", userId).order("role").limit(1).maybeSingle(),
     ]);
 
     setState((prev) => ({
       ...prev,
       profile: profileRes.data ?? null,
-      role: (roleRes.data?.role as AppRole) ?? "member",
+      role: ((roleRes.data?.role as AppRole) ?? "member"),
       loading: false,
     }));
   }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         setState((prev) => ({ ...prev, user: session?.user ?? null, session }));
         if (session?.user) {
-          // Defer data fetch to avoid Supabase deadlock
           setTimeout(() => fetchUserData(session.user.id), 0);
         } else {
           setState((prev) => ({ ...prev, profile: null, role: "member", loading: false }));

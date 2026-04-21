@@ -152,12 +152,12 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: 'Elm Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Elm Sans', 'DM Sans', 'Inter', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'ss01', 'cv11';
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Elm Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Elm Sans', 'DM Sans', 'Inter', system-ui, -apple-system, sans-serif;
     letter-spacing: -0.02em;
     font-weight: 600;
   }

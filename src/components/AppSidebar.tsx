@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import type { Tables } from "@/integrations/supabase/types";
-import { LayoutDashboard, Archive, BarChart3, FolderKanban, ChevronLeft, ChevronRight, LogOut, Sun, Moon, Settings } from "lucide-react";
+import { LayoutDashboard, Archive, BarChart3, FolderKanban, ChevronLeft, ChevronRight, LogOut, Sun, Moon, Settings, Users } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -62,15 +62,26 @@ export function AppSidebar({ projects, selectedProject, onSelectProject, profile
             {!collapsed && <span>Archive</span>}
           </Link>
           {role === "admin" && (
-            <Link
-              to="/analytics"
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                location.pathname === "/analytics" ? "bg-primary/15 text-primary border-l-2 border-primary" : "text-sidebar-foreground hover:bg-sidebar-accent"
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 shrink-0" />
-              {!collapsed && <span>Team Workload</span>}
-            </Link>
+            <>
+              <Link
+                to="/analytics"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  location.pathname === "/analytics" ? "bg-primary/15 text-primary border-l-2 border-primary" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 shrink-0" />
+                {!collapsed && <span>Team Workload</span>}
+              </Link>
+              <Link
+                to="/users"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  location.pathname === "/users" ? "bg-primary/15 text-primary border-l-2 border-primary" : "text-sidebar-foreground hover:bg-sidebar-accent"
+                }`}
+              >
+                <Users className="w-4 h-4 shrink-0" />
+                {!collapsed && <span>User Management</span>}
+              </Link>
+            </>
           )}
         </div>
 
