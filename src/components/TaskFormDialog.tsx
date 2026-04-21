@@ -10,6 +10,8 @@ import type { Tables } from "@/integrations/supabase/types";
 import type { Task, Attachment } from "@/hooks/use-data";
 import { AttachmentsField } from "./AttachmentsField";
 import { toast } from "sonner";
+import { dateStringToWAT6PM, isoToWATDateString } from "@/lib/deadline";
+import { notifyTaskAssignment } from "@/lib/notify";
 
 interface TaskFormDialogProps {
   open: boolean;
@@ -19,6 +21,7 @@ interface TaskFormDialogProps {
   defaultProjectId?: string;
   task?: Task | null;
   currentUserId: string;
+  currentUserName: string;
   onCreate: (input: {
     title: string;
     project_id: string;
@@ -29,17 +32,16 @@ interface TaskFormDialogProps {
     blocker: string;
     attachments: Attachment[];
     created_by: string;
-  }) => Promise<unknown>;
+  }) => Promise<{ id: string } | null | unknown>;
   onUpdate?: (taskId: string, patch: Partial<Tables<"tasks">>, collaboratorIds: string[]) => Promise<void>;
 }
 
-export function TaskFormDialog({ open, onOpenChange, projects, members, defaultProjectId, task, currentUserId, onCreate, onUpdate }: TaskFormDialogProps) {
+export function TaskFormDialog({ open, onOpenChange, projects, members, defaultProjectId, task, currentUserId, currentUserName, onCreate, onUpdate }: TaskFormDialogProps) {
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
   const [assigneeId, setAssigneeId] = useState<string>("");
   const [collaborators, setCollaborators] = useState<string[]>([]);
-  const [duration, setDuration] = useState("");
-  const [deadline, setDeadline] = useState("");
+  const [deadlineDate, setDeadlineDate] = useState(""); // YYYY-MM-DD
   const [blocker, setBlocker] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [saving, setSaving] = useState(false);
@@ -52,9 +54,8 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
         setTitle(task.title);
         setProjectId(task.project_id);
         setAssigneeId(task.assignee_id ?? currentUserId);
-        setCollaborators(task.collaborator_ids ?? []);
-        setDuration(task.duration);
-        setDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : "");
+        setCollaborators((task.collaborator_ids ?? []).filter((id) => id !== task.assignee_id));
+        setDeadlineDate(task.deadline ? isoToWATDateString(task.deadline) : "");
         setBlocker(task.blocker);
         setAttachments(Array.isArray(task.attachments) ? (task.attachments as unknown as Attachment[]) : []);
       } else {
@@ -62,8 +63,7 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
         setProjectId(defaultProjectId && defaultProjectId !== "all" ? defaultProjectId : visibleProjects[0]?.id ?? "");
         setAssigneeId(currentUserId);
         setCollaborators([]);
-        setDuration("");
-        setDeadline("");
+        setDeadlineDate("");
         setBlocker("");
         setAttachments([]);
       }
@@ -77,36 +77,62 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !projectId) {
-      toast.error("Title and project required");
-      return;
-    }
+    if (!title.trim()) { toast.error("Task name is required"); return; }
+    if (!projectId) { toast.error("Project is required"); return; }
     setSaving(true);
     try {
-      const collabIds = collaborators.filter((id) => id !== assigneeId);
+      // Dedup: never include the assignee in collaborators
+      const collabIds = Array.from(new Set(collaborators.filter((id) => id && id !== assigneeId)));
+      const deadlineIso = deadlineDate ? dateStringToWAT6PM(deadlineDate) : null;
+
       if (task && onUpdate) {
+        const previousMembers = new Set([
+          ...(task.assignee_id ? [task.assignee_id] : []),
+          ...(task.collaborator_ids ?? []),
+        ]);
         await onUpdate(task.id, {
           title: title.trim(),
           project_id: projectId,
           assignee_id: assigneeId || null,
-          duration,
-          deadline: deadline ? new Date(deadline).toISOString() : null,
+          deadline: deadlineIso,
           blocker,
           attachments: attachments as unknown as Tables<"tasks">["attachments"],
         }, collabIds);
+
+        // Notify newly added members
+        const allNewMembers = [assigneeId, ...collabIds].filter((id) => id && !previousMembers.has(id));
+        if (allNewMembers.length > 0) {
+          await notifyTaskAssignment({
+            recipientUserIds: allNewMembers,
+            actorId: currentUserId,
+            actorName: currentUserName,
+            taskTitle: title.trim(),
+            taskId: task.id,
+          });
+        }
         toast.success("Task updated");
       } else {
-        await onCreate({
+        const created = await onCreate({
           title: title.trim(),
           project_id: projectId,
           assignee_id: assigneeId || null,
           collaborator_ids: collabIds,
-          duration,
-          deadline: deadline ? new Date(deadline).toISOString() : null,
+          duration: "",
+          deadline: deadlineIso,
           blocker,
           attachments,
           created_by: currentUserId,
         });
+        const newTaskId = (created as { id?: string } | null)?.id;
+        if (newTaskId) {
+          await notifyTaskAssignment({
+            recipientUserIds: [assigneeId, ...collabIds],
+            actorId: currentUserId,
+            actorName: currentUserName,
+            taskTitle: title.trim(),
+            taskId: newTaskId,
+          });
+        }
         toast.success("Task created");
       }
       onOpenChange(false);
@@ -117,6 +143,9 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
     }
   }
 
+  // Default deadline date suggestion: today (in WAT)
+  const todayWAT = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -126,7 +155,7 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="title">Task Name *</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} autoFocus />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -156,7 +185,7 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
 
           {members.length > 1 && (
             <div className="space-y-2">
-              <Label>Collaborators</Label>
+              <Label>Add Members (Collaborators)</Label>
               <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 border border-border rounded-md">
                 {members.filter((m) => m.user_id !== assigneeId).map((m) => (
                   <label key={m.user_id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent rounded px-2 py-1">
@@ -168,15 +197,16 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duration</Label>
-              <Input id="duration" placeholder="e.g. 2h" value={duration} onChange={(e) => setDuration(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="deadline">Deadline</Label>
-              <Input id="deadline" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="deadline">Deadline Date</Label>
+            <Input
+              id="deadline"
+              type="date"
+              value={deadlineDate}
+              min={todayWAT}
+              onChange={(e) => setDeadlineDate(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">Auto-set to 6:00 PM (WAT) on the selected date.</p>
           </div>
 
           <div className="space-y-2">
@@ -192,7 +222,7 @@ export function TaskFormDialog({ open, onOpenChange, projects, members, defaultP
           </div>
 
           <div className="space-y-2">
-            <Label>Attachments & Deliverables</Label>
+            <Label>Attachments & Resources</Label>
             <AttachmentsField value={attachments} onChange={setAttachments} userId={currentUserId} />
           </div>
 
