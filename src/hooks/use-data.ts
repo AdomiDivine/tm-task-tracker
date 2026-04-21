@@ -98,10 +98,12 @@ export function useTasks() {
       .select()
       .single();
     if (error) throw error;
-    if (data && collaborator_ids.length > 0) {
-      await supabase.from("task_collaborators").insert(
-        collaborator_ids.map((user_id) => ({ task_id: data.id, user_id }))
+    const uniqueCollabs = Array.from(new Set(collaborator_ids.filter((id) => id && id !== rest.assignee_id)));
+    if (data && uniqueCollabs.length > 0) {
+      const { error: cErr } = await supabase.from("task_collaborators").insert(
+        uniqueCollabs.map((user_id) => ({ task_id: data.id, user_id }))
       );
+      if (cErr) throw cErr;
     }
     return data;
   }, []);
@@ -139,5 +141,13 @@ export function useMembers() {
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
-  return { members, refetch: fetchMembers };
+  const setUserRole = useCallback(async (userId: string, newRole: "admin" | "team_lead" | "member") => {
+    // Replace any existing role with the new one (single-role-per-user model)
+    await supabase.from("user_roles").delete().eq("user_id", userId);
+    const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: newRole });
+    if (error) throw error;
+    await fetchMembers();
+  }, [fetchMembers]);
+
+  return { members, refetch: fetchMembers, setUserRole };
 }
