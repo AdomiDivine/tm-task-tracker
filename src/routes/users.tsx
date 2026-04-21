@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Shield, Crown, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
+import { ProjectLeadsManager } from "@/components/ProjectLeadsManager";
 
 export const Route = createFileRoute("/users")({
   head: () => ({
@@ -131,6 +132,8 @@ function UsersPage() {
               You can't change your own role to prevent locking yourself out.
             </p>
           </div>
+
+          <ProjectLeadsManager projects={projects} members={members} />
         </div>
       </main>
     </div>
