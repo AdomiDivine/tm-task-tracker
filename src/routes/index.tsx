@@ -1,17 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { TaskBoard } from "@/components/TaskBoard";
 import { StatsBar } from "@/components/StatsBar";
-import { Leaderboard } from "@/components/Leaderboard";
+import { MemberStats } from "@/components/MemberStats";
 import { AppSidebar } from "@/components/AppSidebar";
+import { TaskFormDialog } from "@/components/TaskFormDialog";
+import { ProjectManager } from "@/components/ProjectManager";
 import { useAuth } from "@/hooks/use-auth";
-import { useProjects, useTasks, useMembers } from "@/hooks/use-data";
+import { useProjects, useTasks, useMembers, type Task } from "@/hooks/use-data";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "TM Work OS — Dashboard" },
-      { name: "description", content: "Takeout Media project-based task management dashboard" },
+      { name: "description", content: "Takeout Media task management dashboard" },
     ],
   }),
   component: DashboardPage,
@@ -20,16 +26,21 @@ export const Route = createFileRoute("/")({
 function DashboardPage() {
   const { user, role, profile, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { projects } = useProjects();
-  const { tasks, moveTask } = useTasks();
+  const { projects, createProject, updateProject, archiveProject } = useProjects();
+  const { tasks, moveTask, createTask, updateTask, deleteTask, updateCollaborators } = useTasks();
   const { members } = useMembers();
   const [selectedProject, setSelectedProject] = useState("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTask, setEditTask] = useState<Task | null>(null);
+  const [pmOpen, setPmOpen] = useState(false);
+
+  useNotifications(tasks, user?.id);
 
   useEffect(() => {
     if (!authLoading && !user) navigate({ to: "/login" });
   }, [authLoading, user, navigate]);
 
-  if (authLoading || !user) {
+  if (authLoading || !user || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <p className="text-muted-foreground animate-pulse">Loading...</p>
@@ -37,8 +48,40 @@ function DashboardPage() {
     );
   }
 
+  const isAdmin = role === "admin";
+  const visibleTasks = tasks.filter((t) => t.status !== "done");
+
+  async function handleMove(taskId: string, newStatus: string) {
+    const t = tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    if (newStatus === "done" && !t.completion_link && (Array.isArray(t.attachments) ? t.attachments.length === 0 : true)) {
+      const link = window.prompt("Add a deliverable link (Drive, doc, etc.) or leave blank:");
+      if (link) {
+        await updateTask(taskId, { status: "done", completion_link: link });
+        toast.success("Task completed with deliverable");
+        return;
+      }
+    }
+    moveTask(taskId, newStatus);
+  }
+
+  async function handleDelete(taskId: string) {
+    if (!confirm("Delete this task?")) return;
+    try {
+      await deleteTask(taskId);
+      toast.success("Task deleted");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function handleUpdate(taskId: string, patch: Partial<import("@/integrations/supabase/types").Tables<"tasks">>, collabs: string[]) {
+    await updateTask(taskId, patch);
+    await updateCollaborators(taskId, collabs);
+  }
+
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-screen w-full bg-background">
       <AppSidebar
         projects={projects}
         selectedProject={selectedProject}
@@ -46,20 +89,59 @@ function DashboardPage() {
         profile={profile}
         role={role}
         onSignOut={signOut}
+        onManageProjects={isAdmin ? () => setPmOpen(true) : undefined}
       />
       <main className="flex-1 p-6 md:p-8 overflow-auto">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <StatsBar tasks={tasks} projects={projects} selectedProject={selectedProject} />
+        <div className="max-w-7xl mx-auto space-y-6">
+          <MemberStats tasks={tasks} userId={user.id} displayName={profile.display_name} />
+
+          {isAdmin && <StatsBar tasks={visibleTasks} projects={projects} selectedProject={selectedProject} />}
+
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground">
+              {isAdmin ? "All Active Tasks" : "My Tasks"}
+            </h2>
+            <Button onClick={() => setCreateOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" /> New Task
+            </Button>
+          </div>
+
           <TaskBoard
-            tasks={tasks}
+            tasks={visibleTasks}
             projects={projects}
             members={members}
             selectedProject={selectedProject}
-            onMoveTask={moveTask}
+            currentUserId={user.id}
+            isAdmin={isAdmin}
+            onMoveTask={handleMove}
+            onEdit={setEditTask}
+            onDelete={handleDelete}
           />
-          {role === "admin" && <Leaderboard tasks={tasks} members={members} />}
         </div>
       </main>
+
+      <TaskFormDialog
+        open={createOpen || editTask !== null}
+        onOpenChange={(o) => { if (!o) { setCreateOpen(false); setEditTask(null); } }}
+        projects={projects}
+        members={members}
+        defaultProjectId={selectedProject}
+        task={editTask}
+        currentUserId={user.id}
+        onCreate={createTask}
+        onUpdate={handleUpdate}
+      />
+
+      {isAdmin && (
+        <ProjectManager
+          open={pmOpen}
+          onOpenChange={setPmOpen}
+          projects={projects}
+          onCreate={createProject}
+          onUpdate={updateProject}
+          onArchive={archiveProject}
+        />
+      )}
     </div>
   );
 }

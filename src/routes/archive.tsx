@@ -28,7 +28,7 @@ function ArchivePage() {
     if (!authLoading && !user) navigate({ to: "/login" });
   }, [authLoading, user, navigate]);
 
-  if (authLoading || !user) {
+  if (authLoading || !user || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <p className="text-muted-foreground animate-pulse">Loading...</p>
@@ -36,11 +36,11 @@ function ArchivePage() {
     );
   }
 
-  const doneTasks = tasks.filter(t => t.status === "done");
-  const filtered = selectedProject === "all" ? doneTasks : doneTasks.filter(t => t.project_id === selectedProject);
+  const doneTasks = tasks.filter((t) => t.status === "done");
+  const filtered = selectedProject === "all" ? doneTasks : doneTasks.filter((t) => t.project_id === selectedProject);
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-screen w-full bg-background">
       <AppSidebar projects={projects} selectedProject={selectedProject} onSelectProject={setSelectedProject} profile={profile} role={role} onSignOut={signOut} />
       <main className="flex-1 p-6 md:p-8 overflow-auto">
         <div className="max-w-7xl mx-auto space-y-6">
@@ -55,8 +55,15 @@ function ArchivePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map(task => (
-                <TaskCard key={task.id} task={task} projects={projects} members={members} />
+              {filtered.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  projects={projects}
+                  members={members}
+                  currentUserId={user.id}
+                  isAdmin={role === "admin"}
+                />
               ))}
             </div>
           )}
