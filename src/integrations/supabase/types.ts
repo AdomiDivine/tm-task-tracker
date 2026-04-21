@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      email_log: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          recipient_email: string
+          recipient_user_id: string | null
+          status: string
+          subject: string
+          task_id: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          recipient_email: string
+          recipient_user_id?: string | null
+          status?: string
+          subject: string
+          task_id?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          recipient_email?: string
+          recipient_user_id?: string | null
+          status?: string
+          subject?: string
+          task_id?: string | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          actor_id: string | null
+          body: string
+          created_at: string
+          id: string
+          read: boolean
+          task_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read?: boolean
+          task_id?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          read?: boolean
+          task_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_initials: string
@@ -43,6 +120,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      project_members: {
+        Row: {
+          created_at: string
+          id: string
+          is_lead: boolean
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_lead?: boolean
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_lead?: boolean
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
@@ -196,9 +305,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_project_lead: {
+        Args: { _project_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      app_role: "admin" | "member"
+      app_role: "admin" | "member" | "team_lead"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -326,7 +439,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "member"],
+      app_role: ["admin", "member", "team_lead"],
     },
   },
 } as const
